@@ -1,0 +1,16 @@
+host:
+  url: 44.204.239.34
+  port: 5000
+
+health_status:
+  path: health
+
+login:
+  path: login
+
+register:
+  path: register
+
+user:
+  path: user
+
