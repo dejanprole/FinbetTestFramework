@@ -1,11 +1,14 @@
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.client.utils.URIBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testng.Assert;
 import org.testng.annotations.AfterClass;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -14,10 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
 public class TestUserRegistrationAndLogin {
-    /** generate unique username and email as global variables */
+    private static final Logger logger = LoggerFactory.getLogger(TestUserRegistrationAndLogin.class);
     private static final Random random = new Random();
-    private static final String usernameRandom = "test"+random.nextInt(1000);
-    private static final String emailRandom = usernameRandom+"@mail.com";
+    private static final String usernameRandom = "test" + random.nextInt(1000);
+    private static final String emailRandom = usernameRandom + "@mail.com";
     private static final String password = "Password1@";
     private static final String firstName = "John";
     private static final String middleName = "Sarah";
@@ -28,61 +31,100 @@ public class TestUserRegistrationAndLogin {
     private static Integer userId;
     private static String accessToken;
 
-    /** Creating test user positive case */
-    @Test
-    public void creatingNewTestUser() throws URISyntaxException, IOException, InterruptedException {
-        var registerUri = new URI("http", null, config.host.url, config.host.port, "/" + config.register.path, null, null);
+    @BeforeClass
+    public void creatingUser() throws URISyntaxException, IOException, InterruptedException {
+        logger.info("Starting method creatingUser");
+
         var registrationRequest = new RegistrationRequest(
                 usernameRandom, password, emailRandom, firstName, lastName, middleName
         );
 
         var jsonRequest = mapper.writeValueAsString(registrationRequest);
+
+        if (config == null) {
+            logger.error("Could not read configuration from config file.");
+            throw new IllegalStateException("Configuration is null");
+        }
+
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(registerUri.toString()))
+                .uri(new URIBuilder()
+                        .setScheme("http")
+                        .setHost(config.host.url)
+                        .setPort(config.host.port)
+                        .setPath(BaseClass.REGISTER_PATH)
+                        .build())
                 .header("Content-type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
                 .build();
 
+        logger.info("API URL: " + request.uri());
+
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
         var jsonNode = mapper.readTree(response.body());
-        userId = jsonNode.get("id").asInt(); //Extracting id from response when creating the user
+
+        logger.info("Validating response");
 
         Assert.assertEquals(response.statusCode(), 200, "Response code should be 200");
+        logger.info("Response status code: " + response.statusCode());
         Assert.assertEquals(jsonNode.get("username").asText(), usernameRandom, "Username should be " + usernameRandom);
         Assert.assertEquals(jsonNode.get("email").asText(), emailRandom, "Email should be " + emailRandom);
         Assert.assertEquals(jsonNode.get("firstName").asText(), firstName, "First name should be " + firstName);
         Assert.assertEquals(jsonNode.get("middleName").asText(), middleName, "Middle name should be " + middleName);
         Assert.assertEquals(jsonNode.get("lastName").asText(), lastName, "Last name should be " + lastName);
+        logger.info("Response status body: " + response.body());
+
+        try {
+            if (jsonNode.has("id") && !jsonNode.get("id").isNull()) {
+                userId = jsonNode.get("id").asInt();
+                logger.info("User with id " + userId + " created");
+            } else {
+                logger.error("Id not found in response");
+            }
+        } catch (Exception e) {
+            logger.error("Error while extracting user ID: " + e.getMessage());
+        }
     }
 
-    /** Creating new user */
-    @Test(dataProvider = "creatingNewUser", dependsOnMethods = {"creatingNewTestUser"})
-    public void testCreatingNewUserTestCases(String username, String password, String email, String firstName,
+    /** Creating new user with same email/password/email not in correct format should not be possible */
+    @Test(dataProvider = "usernameAndEmailParameters")
+    public void duplicateUsernamePasswordOrInvalidEmail (String username, String password, String email, String firstName,
                                     String lastName, String middleName, String responseCode, String responseDescription)
             throws URISyntaxException, IOException, InterruptedException {
 
-        var registerUri = new URI("http", null, config.host.url, config.host.port, "/" + config.register.path, null, null);
+        logger.info("Starting method duplicateUsernamePasswordOrInvalidEmail");
 
         var registrationRequest = new RegistrationRequest(
                 username, password, email, firstName, lastName, middleName
         );
 
         var jsonRequest = mapper.writeValueAsString(registrationRequest);
+
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(registerUri.toString()))
+                .uri(new URIBuilder()
+                        .setScheme("http")
+                        .setHost(config.host.url)
+                        .setPort(config.host.port)
+                        .setPath(BaseClass.REGISTER_PATH)
+                        .build())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
                 .build();
 
+        logger.info("API URL: " + request.uri());
+
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
+        logger.info("Validating response");
+
         Assert.assertEquals(response.statusCode(), Integer.parseInt(responseCode), "Expected response is 400");
+        logger.info("Response status code: " + response.statusCode());
         Assert.assertEquals(response.body(), "{\"error\":\"" + responseDescription + "\"}\n", "" +
                 "Error response should be "+ responseDescription + " but it is " + response.body());
+        logger.info("Response status body: " + response.body());
 
     }
-    @DataProvider(name = "creatingNewUser")
-    public static Object[][] creatingNewUser() {
+    @DataProvider(name = "usernameAndEmailParameters")
+    public static Object[][] usernameAndEmailParameters() {
         return new Object[][] {
                 // username / password / email / firstName / lastName / middleName / responseCode / responseDescription
                 {usernameRandom, "Password1@", emailRandom, "testFirstName", "testLastName", "testMiddleName", "400", "Username already exists"},
@@ -94,27 +136,36 @@ public class TestUserRegistrationAndLogin {
     /** Creating test user when one of the parameters is missing */
      //TODO: When request is submitted with optional parameter missing: <h1>Bad Request</h1> <p>The browser (or proxy) sent a request that this server could not understand.</p>
 
-    @Test(dataProvider = "ParameterIsMissing")
-    public void testCreatingUserWhenMandatoryParameterIsMissing(String parameters, String field) throws URISyntaxException, IOException, InterruptedException {
-        var registerUri = new URI("http", null, config.host.url, config.host.port, "/" + config.register.path, null, null);
-
-        var jsonRequest = parameters;
+    @Test(dataProvider = "missingParameters")
+    public void mandatoryParameterIsMissing (String parameters, String field) throws URISyntaxException, IOException, InterruptedException {
+        logger.info("Starting method mandatoryParameterIsMissing");
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(registerUri.toString()))
+                .uri(new URIBuilder()
+                        .setScheme("http")
+                        .setHost(config.host.url)
+                        .setPort(config.host.port)
+                        .setPath(BaseClass.REGISTER_PATH)
+                        .build())
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(parameters, StandardCharsets.UTF_8))
                 .build();
+
+        logger.info("API URL: " + request.uri());
 
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
+        logger.info("Validating response");
+
         Assert.assertEquals(response.statusCode(), 400, "Expected response is 400");
+        logger.info("Response status code: " + response.statusCode());
         Assert.assertEquals(response.body(), "{\"error\":\"Missing required fields: " + field + "\"}\n", "" +
                 "Missing field should be "+ field + " but it is " + response.body());
+        logger.info("Response status body: " + response.body());
     }
 
-    @DataProvider(name = "ParameterIsMissing")
-    public static Object[][] ParameterIsMissing(){
+    @DataProvider(name = "missingParameters")
+    public static Object[][] missingParameters(){
         return new Object[][] {
                 {"""
                     {
@@ -144,49 +195,49 @@ public class TestUserRegistrationAndLogin {
                          "middleName": "test4"
                     }
                     """, "email"},
-//TODO: create test case when first name is missing
-//                {"""
-//                    {
-//                         "username": "testUs10",
-//                         "email": "test1@gmail.com",
-//                         "password": "Password1@",
-//                         "lastName": "test3",
-//                         "middleName": "test4"
-//                    }
-//                    """, "firstName"},
-
         };
     }
 
-
     /**
-     * Testing various negative scenarios when user is creating account
+     * Testing various negative scenarios when username, password or email are not in requested format
      * */
-    @Test(dataProvider = "negativeRegisterUserTestCases", dependsOnMethods = {"creatingNewTestUser"})
-    public void testNegativeRegisterUserTestCases(String username, String password, String email, String firstName,
+    @Test(dataProvider = "usernamePasswordEmailInvalidValues")
+    public void usernamePasswordEmailNotInRequestedFormat (String username, String password, String email, String firstName,
                                                   String lastName, String middleName, String errorResponse) throws URISyntaxException, IOException, InterruptedException {
-        var registerUri = new URI("http", null, config.host.url, config.host.port, "/" + config.register.path, null, null);
+        logger.info("Starting method testNegativeRegisterUserTestCases");
 
         var registrationRequest = new RegistrationRequest(
                 username, password, email, firstName, lastName, middleName
         );
 
         var jsonRequest = mapper.writeValueAsString(registrationRequest);
+
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(registerUri.toString()))
+                .uri(new URIBuilder()
+                        .setScheme("http")
+                        .setHost(config.host.url)
+                        .setPort(config.host.port)
+                        .setPath(BaseClass.REGISTER_PATH)
+                        .build())
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_16))
                 .build();
 
+        logger.info("API URL: " + request.uri());
+
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
+        logger.info("Validating response");
+
         Assert.assertEquals(response.statusCode(), 400, "Expected response is 400");
+        logger.info("Response status code: " + response.statusCode());
         Assert.assertEquals(response.body(), "{\"error\":\"" + errorResponse + "\"}\n", "" +
                 "Error response should be "+ errorResponse + " but it is " + response.body());
+        logger.info("Response status body: " + response.body());
     }
 
-    @DataProvider(name = "negativeRegisterUserTestCases")
-    public static Object[][] negativeRegisterUserTestCases() {
+    @DataProvider(name = "usernamePasswordEmailInvalidValues")
+    public static Object[][] usernamePasswordEmailInvalidValues() {
         return new Object[][] {
                 // username / password / email / firstName / lastName / middleName / errorResponse
                 {"", "", "", "", "", "", "Username must be between 5 and 8 characters" },
@@ -201,37 +252,51 @@ public class TestUserRegistrationAndLogin {
         };
     }
 
-    /** Test login user */
-    @Test(dataProvider = "loginUser", dependsOnMethods = "creatingNewTestUser")
-    public void testLoginUser(String username, String password, Integer statusCode, String responseDescription) throws URISyntaxException, IOException, InterruptedException {
-        var loginUri = new URI("http", null, config.host.url, config.host.port, "/" + config.login.path, null, null);
+    /** Test positive and negative cases when user login */
+    @Test(dataProvider = "loginUserParameters")
+    public void testLoginUser (String username, String password, Integer statusCode, String responseDescription) throws URISyntaxException, IOException, InterruptedException {
+        logger.info("Starting method userLogin");
+
         var loginRequest = new LoginRequest(username, password);
         var jsonRequest = mapper.writeValueAsString(loginRequest);
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(loginUri.toString()))
+                .uri(new URIBuilder()
+                        .setScheme("http")
+                        .setHost(config.host.url)
+                        .setPort(config.host.port)
+                        .setPath(BaseClass.LOGIN_PATH)
+                        .build())
                 .header("Content-type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
                 .build();
 
+        logger.info("API URL: " + request.uri());
+
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+        logger.info("Validating response");
 
         var jsonNode = mapper.readTree(response.body());
 
         Assert.assertEquals(response.statusCode(), Integer.parseInt(statusCode.toString()), "Expected response is " + statusCode);
+        logger.info("Response status code: " + response.statusCode());
 
         if (response.statusCode() == 200) {
             Assert.assertEquals(jsonNode.get("message").asText(), "Login successful", "Login was not successful");
+            logger.info("Response message: " + jsonNode.get("message").asText());
             Assert.assertTrue(response.body().contains("access-token"), "Response body does not contains access token");
+            logger.info("Response status body: " + response.body());
             accessToken = jsonNode.get("access-token").asText();
         } else {
             Assert.assertEquals(response.body(), "{\"error\":\"" + responseDescription + "\"}\n", "" +
                     "Error response should be "+ responseDescription + " but it is " + response.body());
+            logger.info("Response status body: " + response.body());
         }
     }
 
-    @DataProvider(name = "loginUser")
-    public static Object[][] loginUser() {
+    @DataProvider(name = "loginUserParameters")
+    public static Object[][] loginUserParameters() {
         return new Object[][] {
                 {usernameRandom, password, 200, "access-token"},
                 {"usr12345", password, 401, "User does not exist"},
@@ -239,52 +304,73 @@ public class TestUserRegistrationAndLogin {
         };
     }
 
-    /** Return user data when userId and Access token are provided */
     @Test(dependsOnMethods = "testLoginUser")
-    public void testGetUserById() throws URISyntaxException, IOException, InterruptedException {
-        if (userId != null && accessToken != null) {
-            var loginUri = new URI("http", null, config.host.url, config.host.port, "/" + config.user.path + "/" + userId, null, null);
+    public void getUserById() throws URISyntaxException, IOException, InterruptedException {
+        logger.info("Starting method getUserById");
 
+        if (userId != null && accessToken != null) {
             var request = HttpRequest.newBuilder()
-                    .uri(URI.create(loginUri.toString()))
+                    .uri(new URIBuilder()
+                            .setScheme("http")
+                            .setHost(config.host.url)
+                            .setPort(config.host.port)
+                            .setPath(BaseClass.USER_PATH + userId)
+                            .build())
                     .header("Authorization", accessToken)
                     .build();
 
+            logger.info("API URL: " + request.uri());
+
             var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            logger.info("Validating response");
 
             var jsonNode = mapper.readTree(response.body());
 
             Assert.assertEquals(response.statusCode(), 200, "Response code should be 200");
+            logger.info("Response status code: " + response.statusCode());
             Assert.assertEquals(jsonNode.get("username").asText(), usernameRandom, "Username should be " + usernameRandom);
             Assert.assertEquals(jsonNode.get("email").asText(), emailRandom, "Email should be " + emailRandom);
             Assert.assertEquals(jsonNode.get("firstName").asText(), firstName, "First name should be " + firstName);
             Assert.assertEquals(jsonNode.get("middleName").asText(), middleName, "Middle name should be " + middleName); //TODO: bug, middle name should not be null
             Assert.assertEquals(jsonNode.get("lastName").asText(), lastName, "Last name should be " + lastName);
+            logger.info("Response status body: " + response.body());
 
         } else {
             throw new IllegalStateException("userId or accessToken is null!");
         }
     }
 
-    @Test(dependsOnMethods = "testLoginUser", dataProvider = "getUserByIdWhenUserIdOrAccessTokenAreIncorrect")
-    public void testGetUserByIdWhenUserIdOrAccessTokenAreIncorrect(Integer userId, String accessToken, Integer statusCode,
+    @Test(dependsOnMethods = "testLoginUser", dataProvider = "invalidUserIdToken")
+    public void userIdOrAccessTokenIsInvalid(Integer userId, String accessToken, Integer statusCode,
                                                                    String errorResponse) throws URISyntaxException, IOException, InterruptedException {
-        var loginUri = new URI("http", null, config.host.url, config.host.port, "/" + config.user.path + "/" + userId, null, null);
+        logger.info("Starting method getUserById");
 
         var request = HttpRequest.newBuilder()
-                .uri(URI.create(loginUri.toString()))
+                .uri(new URIBuilder()
+                        .setScheme("http")
+                        .setHost(config.host.url)
+                        .setPort(config.host.port)
+                        .setPath(BaseClass.USER_PATH + userId.toString())
+                        .build())
                 .header("Authorization", accessToken)
                 .build();
 
+        logger.info("API URL: " + request.uri());
+
         var response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        Assert.assertEquals(Integer.valueOf(response.statusCode()), Integer.valueOf(statusCode), "Expected response is " + statusCode);
+        logger.info("Validating response");
+
+        Assert.assertEquals(Integer.valueOf(response.statusCode()), statusCode, "Expected response is " + statusCode);
+        logger.info("Response status code: " + response.statusCode());
         Assert.assertEquals(response.body(), "{\"error\":\"" + errorResponse + "\"}\n", "" +
                 "Error response should be "+ errorResponse + " but it is " + response.body());
+        logger.info("Response status body: " + response.body());
     }
 
-    @DataProvider(name = "getUserByIdWhenUserIdOrAccessTokenAreIncorrect")
-    public static Object[][] getUserByIdWhenUserIdOrAccessTokenAreIncorrect() {
+    @DataProvider(name = "invalidUserIdToken")
+    public static Object[][] invalidUserIdToken() {
         return new Object[][] {
                 {userId, "eyJhbGciOiJIUzI1", 401, "Invalid token"},
                 {123456789, accessToken, 404, "User not found"}
@@ -293,6 +379,6 @@ public class TestUserRegistrationAndLogin {
 
     @AfterClass(alwaysRun = true)
     public void TearDown() {
-        System.out.print("Call method for deleting user data");
+        System.out.println("Call method for deleting user data");
     }
 }
