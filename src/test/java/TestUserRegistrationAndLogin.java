@@ -76,16 +76,16 @@ public class TestUserRegistrationAndLogin {
         try {
             if (jsonNode.has("id") && !jsonNode.get("id").isNull()) {
                 userId = jsonNode.get("id").asInt();
-                logger.info("User with id " + userId + " created");
+                logger.info("User with ID " + userId + " created");
             } else {
-                logger.error("Id not found in response");
+                logger.error("ID not found in response");
             }
         } catch (Exception e) {
             logger.error("Error while extracting user ID: " + e.getMessage());
         }
     }
 
-    /** Creating new user with same email/password/email not in correct format should not be possible */
+    /** Creating new user with same email/password/invalid email should not be possible */
     @Test(dataProvider = "usernameAndEmailParameters")
     public void duplicateUsernamePasswordOrInvalidEmail (String username, String password, String email, String firstName,
                                     String lastName, String middleName, String responseCode, String responseDescription)
@@ -134,7 +134,8 @@ public class TestUserRegistrationAndLogin {
     }
 
     /** Creating test user when one of the parameters is missing */
-     //TODO: When request is submitted with optional parameter missing: <h1>Bad Request</h1> <p>The browser (or proxy) sent a request that this server could not understand.</p>
+     //TODO: When request is submitted with optional parameter missing, server should return 400: Bad Request but instead:
+     //TODO: <h1>Bad Request</h1> <p>The browser (or proxy) sent a request that this server could not understand.</p>
 
     @Test(dataProvider = "missingParameters")
     public void mandatoryParameterIsMissing (String parameters, String field) throws URISyntaxException, IOException, InterruptedException {
