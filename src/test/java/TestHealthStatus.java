@@ -10,7 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
-public class TestHealthStatus extends BaseClass {
+public class TestHealthStatus {
     private static final Logger logger = LoggerFactory.getLogger(TestHealthStatus.class);
 
     /** Test health status */
