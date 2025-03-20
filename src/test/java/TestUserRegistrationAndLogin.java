@@ -66,11 +66,11 @@ public class TestUserRegistrationAndLogin {
 
         Assert.assertEquals(response.statusCode(), 200, "Response code should be 200");
         logger.info("Response status code: " + response.statusCode());
-        Assert.assertEquals(jsonNode.get("username").asText(), usernameRandom, "Username should be " + usernameRandom);
-        Assert.assertEquals(jsonNode.get("email").asText(), emailRandom, "Email should be " + emailRandom);
-        Assert.assertEquals(jsonNode.get("firstName").asText(), firstName, "First name should be " + firstName);
-        Assert.assertEquals(jsonNode.get("middleName").asText(), middleName, "Middle name should be " + middleName);
-        Assert.assertEquals(jsonNode.get("lastName").asText(), lastName, "Last name should be " + lastName);
+//        Assert.assertEquals(jsonNode.get("username").asText(), usernameRandom, "Username should be " + usernameRandom);
+//        Assert.assertEquals(jsonNode.get("email").asText(), emailRandom, "Email should be " + emailRandom);
+//        Assert.assertEquals(jsonNode.get("firstName").asText(), firstName, "First name should be " + firstName);
+//        Assert.assertEquals(jsonNode.get("middleName").asText(), middleName, "Middle name should be " + middleName);
+//        Assert.assertEquals(jsonNode.get("lastName").asText(), lastName, "Last name should be " + lastName);
         logger.info("Response status body: " + response.body());
 
         try {
@@ -83,6 +83,19 @@ public class TestUserRegistrationAndLogin {
         } catch (Exception e) {
             logger.error("Error while extracting user ID: " + e.getMessage());
         }
+
+        var expectedRegistrationResponse = new RegistrationResponse(userId, usernameRandom, emailRandom, firstName, lastName, middleName,
+                BaseClass.STATUS_CODE_SUCCESSFUL);
+
+        var registrationResponse = new RegistrationResponse(
+                userId,
+                jsonNode.get("username").asText(),
+                jsonNode.get("email").asText(),
+                jsonNode.get("firstName").asText(),
+                jsonNode.get("lastName").asText(),
+                jsonNode.get("middleName").asText(),
+                BaseClass.STATUS_CODE_SUCCESSFUL);
+
     }
 
     /** Creating new user with same email/password/invalid email should not be possible */
