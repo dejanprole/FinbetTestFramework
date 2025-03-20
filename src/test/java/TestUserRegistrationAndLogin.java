@@ -96,6 +96,9 @@ public class TestUserRegistrationAndLogin {
                 jsonNode.get("middleName").asText(),
                 BaseClass.STATUS_CODE_SUCCESSFUL);
 
+        Assert.assertEquals(mapper.writeValueAsString(expectedRegistrationResponse), mapper.writeValueAsString(registrationResponse),
+                "Error in expected registration response");
+
     }
 
     /** Creating new user with same email/password/invalid email should not be possible */
