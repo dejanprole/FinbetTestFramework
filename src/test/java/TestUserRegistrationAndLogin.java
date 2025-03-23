@@ -16,7 +16,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
 
-public class TestUserRegistrationAndLogin {
+public class TestUserRegistrationAndLogin extends BaseClass {
     private static final Logger logger = LoggerFactory.getLogger(TestUserRegistrationAndLogin.class);
     private static final Random random = new Random();
     private static final String usernameRandom = "test" + random.nextInt(1000);
@@ -39,23 +39,8 @@ public class TestUserRegistrationAndLogin {
                 usernameRandom, password, emailRandom, firstName, lastName, middleName
         );
 
-        var jsonRequest = mapper.writeValueAsString(registrationRequest);
-
-        if (config == null) {
-            logger.error("Could not read configuration from config file.");
-            throw new IllegalStateException("Configuration is null");
-        }
-
-        var request = HttpRequest.newBuilder()
-                .uri(new URIBuilder()
-                        .setScheme("http")
-                        .setHost(config.host.url)
-                        .setPort(config.host.port)
-                        .setPath(BaseClass.REGISTER_PATH)
-                        .build())
-                .header("Content-type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
-                .build();
+        var request = createRegistrationRequest(registrationRequest, BaseClass.REGISTER_PATH);
+        var client = HttpClient.newHttpClient();
 
         logger.info("API URL: " + request.uri());
 
@@ -63,14 +48,15 @@ public class TestUserRegistrationAndLogin {
         var jsonNode = mapper.readTree(response.body());
 
         logger.info("Validating response");
+        logger.info("Response status body: " + response.body());
 
         Assert.assertEquals(response.statusCode(), 200, "Response code should be 200");
         logger.info("Response status code: " + response.statusCode());
-//        Assert.assertEquals(jsonNode.get("username").asText(), usernameRandom, "Username should be " + usernameRandom);
-//        Assert.assertEquals(jsonNode.get("email").asText(), emailRandom, "Email should be " + emailRandom);
-//        Assert.assertEquals(jsonNode.get("firstName").asText(), firstName, "First name should be " + firstName);
-//        Assert.assertEquals(jsonNode.get("middleName").asText(), middleName, "Middle name should be " + middleName);
-//        Assert.assertEquals(jsonNode.get("lastName").asText(), lastName, "Last name should be " + lastName);
+        Assert.assertEquals(jsonNode.get("username").asText(), usernameRandom, "Username should be " + usernameRandom);
+        Assert.assertEquals(jsonNode.get("email").asText(), emailRandom, "Email should be " + emailRandom);
+        Assert.assertEquals(jsonNode.get("firstName").asText(), firstName, "First name should be " + firstName);
+        Assert.assertEquals(jsonNode.get("middleName").asText(), middleName, "Middle name should be " + middleName);
+        Assert.assertEquals(jsonNode.get("lastName").asText(), lastName, "Last name should be " + lastName);
         logger.info("Response status body: " + response.body());
 
         try {
@@ -84,22 +70,37 @@ public class TestUserRegistrationAndLogin {
             logger.error("Error while extracting user ID: " + e.getMessage());
         }
 
-        var expectedRegistrationResponse = new RegistrationResponse(userId, usernameRandom, emailRandom, firstName, lastName, middleName,
-                BaseClass.STATUS_CODE_SUCCESSFUL);
+//        var expectedResponse = new RegistrationResponse (
+//                jsonNode.get("id").asInt(),
+//                usernameRandom,
+//                emailRandom,
+//                firstName,
+//                middleName,
+//                lastName
+//        );
+//
+//        var actualResponse = mapper.readValue(response.body(), RegistrationResponse.class);
+//
+//        Assert.assertEquals(expectedResponse, actualResponse, "Not the same");
 
-        var registrationResponse = new RegistrationResponse(
-                userId,
-                jsonNode.get("username").asText(),
-                jsonNode.get("email").asText(),
-                jsonNode.get("firstName").asText(),
-                jsonNode.get("lastName").asText(),
-                jsonNode.get("middleName").asText(),
-                BaseClass.STATUS_CODE_SUCCESSFUL);
-
-        Assert.assertEquals(mapper.writeValueAsString(expectedRegistrationResponse), mapper.writeValueAsString(registrationResponse),
-                "Error in expected registration response");
+//        var expectedRegistrationResponse = new RegistrationResponse(userId, usernameRandom, emailRandom, firstName, lastName, middleName,
+//                BaseClass.STATUS_CODE_SUCCESSFUL);
+//
+//        var registrationResponse = new RegistrationResponse(
+//                userId,
+//                jsonNode.get("username").asText(),
+//                jsonNode.get("email").asText(),
+//                jsonNode.get("firstName").asText(),
+//                jsonNode.get("lastName").asText(),
+//                jsonNode.get("middleName").asText(),
+//                BaseClass.STATUS_CODE_SUCCESSFUL);
+//
+//        Assert.assertEquals(mapper.writeValueAsString(expectedRegistrationResponse), mapper.writeValueAsString(registrationResponse),
+//                "Error in expected registration response");
 
     }
+
+
 
     /** Creating new user with same email/password/invalid email should not be possible */
     @Test(dataProvider = "usernameAndEmailParameters")
@@ -113,18 +114,8 @@ public class TestUserRegistrationAndLogin {
                 username, password, email, firstName, lastName, middleName
         );
 
-        var jsonRequest = mapper.writeValueAsString(registrationRequest);
-
-        var request = HttpRequest.newBuilder()
-                .uri(new URIBuilder()
-                        .setScheme("http")
-                        .setHost(config.host.url)
-                        .setPort(config.host.port)
-                        .setPath(BaseClass.REGISTER_PATH)
-                        .build())
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
-                .build();
+        var request = createRegistrationRequest(registrationRequest, BaseClass.REGISTER_PATH);
+        var client = HttpClient.newHttpClient();
 
         logger.info("API URL: " + request.uri());
 
@@ -227,18 +218,8 @@ public class TestUserRegistrationAndLogin {
                 username, password, email, firstName, lastName, middleName
         );
 
-        var jsonRequest = mapper.writeValueAsString(registrationRequest);
-
-        var request = HttpRequest.newBuilder()
-                .uri(new URIBuilder()
-                        .setScheme("http")
-                        .setHost(config.host.url)
-                        .setPort(config.host.port)
-                        .setPath(BaseClass.REGISTER_PATH)
-                        .build())
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_16))
-                .build();
+        var request = createRegistrationRequest(registrationRequest, BaseClass.REGISTER_PATH);
+        var client = HttpClient.newHttpClient();
 
         logger.info("API URL: " + request.uri());
 
